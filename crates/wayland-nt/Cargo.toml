@@ -1,0 +1,19 @@
+[package]
+name = "wayland-nt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native Windows NT implementation of the Wayland wire protocol (Named Pipes + IOCP + DuplicateHandle + FileMapping + DXGI Shared Surfaces)"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+bytemuck.workspace = true
+bitflags = { workspace = true, features = ["serde"] }
+windows.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "hyprshot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "hyprshot"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+windows.workspace = true
+hyprland-win-core = { path = "../hyprland-win-core" }

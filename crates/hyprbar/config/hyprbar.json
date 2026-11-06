@@ -1,0 +1,55 @@
+{
+  "bar_height": 36,
+  "pill_height": 24,
+  "pill_radius": 12,
+  "pill_gap": 4.0,
+
+  "modules_left": [
+    "custom/omarchy",
+    "hyprland/workspaces",
+    "mpris"
+  ],
+  "modules_center": [
+    "hyprland/window"
+  ],
+  "modules_right": [
+    "group/tray-expander",
+    "group/ctl",
+    "clock"
+  ],
+
+  "color_bar_bg": "#1e1e23",
+  "color_accent_line": "#40414a",
+  "color_text_white": "#e4e6eb",
+  "color_text_muted": "#989aa4",
+  "color_cyan": "#5e9ef8",
+  "color_mint": "#52c47e",
+
+  "ws_active_width": 32.0,
+  "ws_occupied_width": 24.0,
+  "ws_empty_dot_width": 16.0,
+  "ws_anim_speed": 14.0,
+  "color_ws_active_highlight": "#4a4c56",
+  "color_ws_active_border": "#5e606c",
+  "color_ws_active_text": "#ecedf2",
+  "color_ws_occupied_bg": "#28292f",
+  "color_ws_occupied_border": "#383a42",
+  "color_ws_occupied_hover": "#30323a",
+  "color_ws_occupied_text": "#babcc6",
+  "color_ws_empty_bg": "#28292f",
+  "color_ws_empty_border": "#383a42",
+  "color_ws_empty_dot": "#92949e",
+
+  "window_max_width": 420,
+  "active_title_fallback": "",
+
+  "clock_width": 84,
+  "clock_format": "%H:%M",
+  "color_clock_bg": "#28292f",
+  "color_clock_text": "#e4e6eb",
+
+  "font_family_ui": "SF Pro Text",
+  "font_family_mono": "JetBrainsMono NF",
+  "font_size": 12,
+  "font_weight": 700
+}

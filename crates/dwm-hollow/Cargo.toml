@@ -1,0 +1,14 @@
+[package]
+name = "dwm-hollow"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Windows 7/10/11 DWM Hollower & Win32Wayland zero-copy GPU texture bridge (DwmGetDxSharedSurface + DWMWA_CLOAK + Independent Flip Direct Scanout)"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+tracing.workspace = true
+windows.workspace = true
+wayland-nt = { path = "../wayland-nt" }

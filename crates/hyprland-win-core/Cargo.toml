@@ -1,0 +1,16 @@
+[package]
+name = "hyprland-win-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Hyprland configuration parser, Dwindle/Master tiling engine, Cubic Bezier animation solver, and hyprctl IPC protocol"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+dwm-hollow = { path = "../dwm-hollow" }
+wayland-nt = { path = "../wayland-nt" }

@@ -1,0 +1,69 @@
+/* Minimal Waybar Themes V2 (atif-1402/minimal-waybar-themes V2) for HyprBar — macOS Dark Mode Theme */
+
+:root {
+    --bar-bg: #1E1E23;
+    --border-color: #40414A;
+    --fg-color: #E4E6EB;
+    --subtext-color: #989AA4;
+    --accent-color: #484A54;
+    --accent-secondary: #E4E6EB;
+
+    --ws-active-bg: #4A4C56;
+    --ws-active-border: #5E606C;
+    --ws-active-fg: #ECEDF2;
+    --ws-occupied-bg: #28292F;
+    --ws-occupied-hover: #30323A;
+    --ws-occupied-fg: #BABCC6;
+    --ws-empty-bg: #28292F;
+    --ws-empty-fg: #92949E;
+
+    --bar-height: 36px;
+    --pill-height: 24px;
+    --pill-radius: 12px;
+    --pill-gap: 4px;
+
+    --ws-active-width: 32px;
+    --ws-occupied-width: 24px;
+    --ws-empty-dot-width: 16px;
+    --ws-anim-speed: 14;
+
+    --font-family: "SF Pro Text", "applefont", sans-serif;
+    --font-size: 12px;
+    --font-weight: 700;
+
+    --modules-left: custom/omarchy hyprland/workspaces mpris;
+    --modules-center: hyprland/window;
+    --modules-right: group/tray-expander group/ctl clock;
+
+    --clock-bg: #28292F;
+    --clock-format: "%H:%M";
+}
+
+window#waybar, window#hyprbar {
+    background-color: #1E1E23;
+    border-radius: 25px;
+    margin-top: 2px;
+    margin-left: 10px;
+    margin-right: 10px;
+    color: #E4E6EB;
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+    font-weight: 700;
+}
+
+#workspaces,
+#mpris,
+#window,
+#group-ctl,
+#clock,
+#custom-omarchy {
+    background-color: #28292F;
+    border-radius: 16px;
+    padding: 0px 8px;
+    margin: 3.5px 3.5px;
+    color: #E4E6EB;
+}
+
+#custom-notification-silencing-indicator.active {
+    color: #EB6A66;
+}

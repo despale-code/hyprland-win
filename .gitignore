@@ -1,0 +1,13 @@
+﻿/target/
+**/*.rs.bk
+*.pdb
+*.old.exe
+.ragpilot/
+.agents/
+.gemini/
+AGENTS.md
+CLAUDE.md
+pass.txt
+.config/pass.txt
+.config/wallpaper.bmp
+config/wallpaper.bmp
