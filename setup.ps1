@@ -90,20 +90,20 @@ opacity = 0.96
 size = 11.0
 
 [font.normal]
-family = "Liga SFMono Nerd Font"
+family = "DepartureMono Nerd Font"
 style = "Regular"
 
 [font.bold]
-family = "Liga SFMono Nerd Font"
-style = "Bold"
+family = "DepartureMono Nerd Font"
+style = "Regular"
 
 [font.italic]
-family = "Liga SFMono Nerd Font"
-style = "Regular Italic"
+family = "DepartureMono Nerd Font"
+style = "Regular"
 
 [font.bold_italic]
-family = "Liga SFMono Nerd Font"
-style = "Bold Italic"
+family = "DepartureMono Nerd Font"
+style = "Regular"
 
 [terminal.shell]
 program = "powershell.exe"
