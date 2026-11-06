@@ -78,7 +78,7 @@ impl WorkspaceScene {
             special_workspace_open: false,
             monitor_width,
             monitor_height,
-            reserved_margins: [40, 9, 9, 9], // [top: 40px hyprbar, bottom: 9px border, left: 9px border, right: 9px border]
+            reserved_margins: [36, 9, 9, 9], // [top: 36px hyprbar, bottom: 9px border, left: 9px border, right: 9px border]
             clients: HashMap::new(),
             workspace_order,
             workspace_groups: HashMap::new(),

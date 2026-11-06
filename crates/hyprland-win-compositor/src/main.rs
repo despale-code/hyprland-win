@@ -2398,6 +2398,24 @@ fn spawn_unelevated_user_command(cmd_line: &str) {
                 }
             }
 
+            let user_work_dir_u16: Option<Vec<u16>> = if is_background_companion {
+                std::path::Path::new(&resolved_exe)
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty() && p.is_dir())
+                    .map(|p| p.to_string_lossy().encode_utf16().chain(Some(0)).collect())
+            } else {
+                std::env::var("USERPROFILE")
+                    .ok()
+                    .filter(|p| !p.is_empty() && std::path::Path::new(p).is_dir())
+                    .map(|p| p.encode_utf16().chain(Some(0)).collect())
+                    .or_else(|| {
+                        std::path::Path::new(&resolved_exe)
+                            .parent()
+                            .filter(|p| !p.as_os_str().is_empty() && p.is_dir())
+                            .map(|p| p.to_string_lossy().encode_utf16().chain(Some(0)).collect())
+                    })
+            };
+
             if let Some(h_dup) = unelevated_tok {
                 let full_cmd = if args_part.is_empty() {
                     format!("\"{}\"", resolved_exe)
@@ -2405,11 +2423,7 @@ fn spawn_unelevated_user_command(cmd_line: &str) {
                     format!("\"{}\" {}", resolved_exe, args_part)
                 };
                 let mut cmd_u16: Vec<u16> = full_cmd.encode_utf16().chain(Some(0)).collect();
-                let work_dir_u16: Option<Vec<u16>> = std::path::Path::new(&resolved_exe)
-                    .parent()
-                    .filter(|p| !p.as_os_str().is_empty() && p.is_dir())
-                    .map(|p| p.to_string_lossy().encode_utf16().chain(Some(0)).collect());
-                let work_dir_ptr = work_dir_u16
+                let work_dir_ptr = user_work_dir_u16
                     .as_ref()
                     .map(|v| PCWSTR(v.as_ptr()))
                     .unwrap_or(PCWSTR::null());
@@ -2453,6 +2467,15 @@ fn spawn_unelevated_user_command(cmd_line: &str) {
             }
         }
 
+        let fallback_dir_u16: Option<Vec<u16>> = std::env::var("USERPROFILE")
+            .ok()
+            .filter(|p| !p.is_empty() && std::path::Path::new(p).is_dir())
+            .map(|p| p.encode_utf16().chain(Some(0)).collect());
+        let fallback_dir_ptr = fallback_dir_u16
+            .as_ref()
+            .map(|v| PCWSTR(v.as_ptr()))
+            .unwrap_or(PCWSTR::null());
+
         let op: Vec<u16> = "open\0".encode_utf16().collect();
         let file: Vec<u16> = resolved_exe.encode_utf16().chain(Some(0)).collect();
         let params: Vec<u16> = args_part.encode_utf16().chain(Some(0)).collect();
@@ -2466,7 +2489,7 @@ fn spawn_unelevated_user_command(cmd_line: &str) {
             PCWSTR(op.as_ptr()),
             PCWSTR(file.as_ptr()),
             params_ptr,
-            PCWSTR::null(),
+            fallback_dir_ptr,
             SW_SHOWNORMAL,
         );
     }

@@ -57,6 +57,18 @@
 
 ## Quick Start (Run in Windows Terminal)
 
+### Automated Setup & Integration (`setup.ps1`)
+Run [`setup.ps1`](setup.ps1) in PowerShell to automatically install dependencies, seed `~/.config/hyprwin`, build all release binaries, and register the Windows logon task:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+### Automated Update (`update.ps1`)
+Run [`update.ps1`](update.ps1) at any time to pull the latest changes from GitHub, rebuild in `--release` mode without linker locks, and hot-restart the compositor and companion daemons:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\update.ps1
+```
+
 ### 1. Probe Zero-Copy DWM Shared GPU Textures on Your Desktop
 ```powershell
 cd hyprland-win

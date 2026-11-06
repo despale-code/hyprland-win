@@ -9,9 +9,9 @@
 mod ui;
 
 use anyhow::Result;
-use hyprland_win_core::{HyprNotifyMessage, HYPRNOTIFY_IPC_PIPE};
+use hyprland_win_core::{hyprland_win_config_file, HyprNotifyMessage, HYPRNOTIFY_IPC_PIPE};
 use std::collections::HashSet;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
@@ -130,11 +130,23 @@ fn enqueue_toast_ex(
             let timeout_clamped = timeout_ms.max(2500);
 
             st.win_dedup
-                .retain(|(_, _, ts)| now.duration_since(*ts).as_secs_f32() < 3.0);
+                .retain(|(_, _, ts)| now.duration_since(*ts).as_secs_f32() < 60.0);
+
+            let s_low = clean_sum.to_lowercase();
+            let b_low = clean_body.to_lowercase();
+
+            // Coalesce if an identical non-dismissed notification is already visible on screen
+            if let Some(existing_dup) = st.toasts.iter_mut().find(|t| {
+                t.dismissed_at.is_none()
+                    && t.summary.to_lowercase() == s_low
+                    && t.body.to_lowercase() == b_low
+            }) {
+                existing_dup.created_at = now;
+                existing_dup.timeout_ms = timeout_clamped;
+                return;
+            }
 
             if dedup_window_sec > 0.0 {
-                let s_low = clean_sum.to_lowercase();
-                let b_low = clean_body.to_lowercase();
                 if st.win_dedup.iter().any(|(s, b, ts)| {
                     now.duration_since(*ts).as_secs_f32() < dedup_window_sec
                         && s == &s_low
@@ -146,7 +158,7 @@ fn enqueue_toast_ex(
             }
 
             // Only replace in-place for "Now Playing" media notifications so one playing media
-            // never stacks multiple media notifications, while all normal/Windows notifications stack!
+            // never stacks multiple media notifications, while distinct Windows notifications stack!
             if is_media {
                 if let Some(existing) = st
                     .toasts
@@ -185,17 +197,17 @@ fn enqueue_toast_ex(
                 is_media,
             });
 
-            // Allow up to 8 stacked notification cards like macOS
+            // Cap visible stack at 5 notification cards
             let mut active_non_dismissed = 0usize;
             for t in st.toasts.iter_mut().rev() {
                 if t.dismissed_at.is_none() {
                     active_non_dismissed += 1;
-                    if active_non_dismissed > 8 {
+                    if active_non_dismissed > 5 {
                         t.dismissed_at = Some(now);
                     }
                 }
             }
-            if st.toasts.len() > 10 {
+            if st.toasts.len() > 8 {
                 st.toasts.remove(0);
             }
         }
@@ -395,48 +407,61 @@ fn run_notify_pipe_server() {
     }
 }
 
-fn decode_xml_entities(s: &str) -> String {
-    s.replace("&quot;", "\"")
-        .replace("&apos;", "'")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&#39;", "'")
+fn current_utc_filetime_100ns() -> i64 {
+    #[repr(C)]
+    #[derive(Default)]
+    struct FileTime {
+        dw_low_date_time: u32,
+        dw_high_date_time: u32,
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetSystemTimeAsFileTime(lp_system_time_as_file_time: *mut FileTime);
+    }
+    unsafe {
+        let mut ft = FileTime::default();
+        GetSystemTimeAsFileTime(&mut ft);
+        ((ft.dw_high_date_time as i64) << 32) | (ft.dw_low_date_time as i64)
+    }
 }
 
-fn extract_toast_texts_from_xml(xml: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut rem = xml;
-    while let Some(start_tag) = rem.find("<text") {
-        let after_start = &rem[start_tag + 5..];
-        let Some(gt_pos) = after_start.find('>') else {
-            break;
-        };
-        if after_start[..gt_pos].ends_with('/') {
-            rem = &after_start[gt_pos + 1..];
-            continue;
+fn load_persisted_seen_ids() -> (u32, HashSet<u32>) {
+    let path = hyprland_win_config_file("notify_seen.txt");
+    let mut max_id = 0u32;
+    let mut set = HashSet::new();
+    if let Ok(text) = std::fs::read_to_string(&path) {
+        for tok in text.split_whitespace() {
+            if let Ok(id) = tok.parse::<u32>() {
+                set.insert(id);
+                if id > max_id {
+                    max_id = id;
+                }
+            }
         }
-        let content_start = &after_start[gt_pos + 1..];
-        let Some(end_tag) = content_start.find("</text>") else {
-            break;
-        };
-        let raw_inner = content_start[..end_tag].trim();
-        // Strip CDATA if present
-        let inner = raw_inner
-            .strip_prefix("<![CDATA[")
-            .and_then(|s| s.strip_suffix("]]>"))
-            .unwrap_or(raw_inner);
-        let decoded = decode_xml_entities(inner).trim().to_string();
-        if !decoded.is_empty() {
-            out.push(decoded);
-        }
-        rem = &content_start[end_tag + 7..];
     }
-    out
+    (max_id, set)
+}
+
+fn save_persisted_seen_ids(max_id: u32, seen: &HashSet<u32>) {
+    let path = hyprland_win_config_file("notify_seen.txt");
+    let mut ids: Vec<u32> = seen.iter().copied().collect();
+    ids.sort_unstable();
+    if ids.len() > 256 {
+        let drain_count = ids.len() - 256;
+        ids.drain(0..drain_count);
+    }
+    if max_id > 0 && !ids.contains(&max_id) {
+        ids.push(max_id);
+    }
+    let body = ids
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let _ = std::fs::write(path, body);
 }
 
 fn run_windows_notification_fetcher() {
-    use std::os::windows::fs::OpenOptionsExt;
     use windows::UI::Notifications::Management::{
         UserNotificationListener, UserNotificationListenerAccessStatus,
     };
@@ -447,20 +472,9 @@ fn run_windows_notification_fetcher() {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
     }
 
-    let mut seen_ids: HashSet<u32> = HashSet::new();
-    let mut initialized_ids = false;
-
-    let wal_path = std::env::var("LOCALAPPDATA")
-        .map(|p| {
-            std::path::PathBuf::from(p)
-                .join("Microsoft\\Windows\\Notifications\\wpndatabase.db-wal")
-        })
-        .ok();
-    let mut last_wal_len: u64 = wal_path
-        .as_ref()
-        .and_then(|p| std::fs::metadata(p).ok())
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let (mut max_seen_id, mut seen_ids) = load_persisted_seen_ids();
+    let mut warmup_polls_remaining: u8 = 2;
+    let startup_ft = current_utc_filetime_100ns();
 
     let listener_opt = UserNotificationListener::Current().ok();
     if let Some(ref listener) = listener_opt {
@@ -472,7 +486,7 @@ fn run_windows_notification_fetcher() {
     loop {
         std::thread::sleep(std::time::Duration::from_millis(350));
 
-        // 1. Poll WinRT `UserNotificationListener` for all Windows Toast Notifications
+        // Poll WinRT `UserNotificationListener` for live Windows Toast Notifications
         if let Some(ref listener) = listener_opt {
             if listener.GetAccessStatus().ok()
                 == Some(UserNotificationListenerAccessStatus::Allowed)
@@ -480,49 +494,80 @@ fn run_windows_notification_fetcher() {
                 if let Ok(op) = listener.GetNotificationsAsync(NotificationKinds::Toast) {
                     if let Ok(notifs) = op.get() {
                         let count = notifs.Size().unwrap_or(0);
-                        if !initialized_ids {
+                        let now_ft = current_utc_filetime_100ns();
+
+                        if warmup_polls_remaining > 0 {
+                            let mut changed = false;
                             for i in 0..count {
                                 if let Ok(n) = notifs.GetAt(i) {
                                     if let Ok(id) = n.Id() {
-                                        seen_ids.insert(id);
+                                        if seen_ids.insert(id) {
+                                            changed = true;
+                                        }
+                                        if id > max_seen_id {
+                                            max_seen_id = id;
+                                            changed = true;
+                                        }
                                     }
                                 }
                             }
-                            initialized_ids = true;
-                        } else {
-                            for i in 0..count {
-                                let Ok(n) = notifs.GetAt(i) else { continue };
-                                let Ok(id) = n.Id() else { continue };
-                                if !seen_ids.insert(id) {
+                            if changed {
+                                save_persisted_seen_ids(max_seen_id, &seen_ids);
+                            }
+                            if count > 0 || warmup_polls_remaining == 1 {
+                                warmup_polls_remaining = warmup_polls_remaining.saturating_sub(1);
+                            }
+                            continue;
+                        }
+
+                        let mut state_dirty = false;
+                        for i in 0..count {
+                            let Ok(n) = notifs.GetAt(i) else { continue };
+                            let Ok(id) = n.Id() else { continue };
+
+                            // Strictly ignore any notification ID we have already seen or any ID <= max_seen_id
+                            if id <= max_seen_id || !seen_ids.insert(id) {
+                                continue;
+                            }
+                            max_seen_id = max_seen_id.max(id);
+                            state_dirty = true;
+
+                            // Verify notification CreationTime is fresh (created within the last 15s and not prior to startup)
+                            if let Ok(ct) = n.CreationTime() {
+                                let age_100ns = now_ft.saturating_sub(ct.UniversalTime);
+                                // 15 seconds = 150_000_000 * 100ns
+                                if ct.UniversalTime < startup_ft.saturating_sub(30_000_000)
+                                    || age_100ns > 150_000_000
+                                {
                                     continue;
                                 }
+                            }
 
-                                let app_name = n
-                                    .AppInfo()
-                                    .and_then(|ai| ai.DisplayInfo())
-                                    .and_then(|di| di.DisplayName())
-                                    .map(|s| s.to_string_lossy())
-                                    .unwrap_or_default();
+                            let app_name = n
+                                .AppInfo()
+                                .and_then(|ai| ai.DisplayInfo())
+                                .and_then(|di| di.DisplayName())
+                                .map(|s| s.to_string_lossy())
+                                .unwrap_or_default();
 
-                                let mut texts: Vec<String> = Vec::new();
-                                if let Ok(notif_obj) = n.Notification() {
-                                    if let Ok(visual) = notif_obj.Visual() {
-                                        if let Ok(binding_name) =
-                                            KnownNotificationBindings::ToastGeneric()
-                                        {
-                                            if let Ok(binding) = visual.GetBinding(&binding_name) {
-                                                if let Ok(elems) = binding.GetTextElements() {
-                                                    let el_count = elems.Size().unwrap_or(0);
-                                                    for j in 0..el_count {
-                                                        if let Ok(el) = elems.GetAt(j) {
-                                                            if let Ok(t) = el.Text() {
-                                                                let s = t
-                                                                    .to_string_lossy()
-                                                                    .trim()
-                                                                    .to_string();
-                                                                if !s.is_empty() {
-                                                                    texts.push(s);
-                                                                }
+                            let mut texts: Vec<String> = Vec::new();
+                            if let Ok(notif_obj) = n.Notification() {
+                                if let Ok(visual) = notif_obj.Visual() {
+                                    if let Ok(binding_name) =
+                                        KnownNotificationBindings::ToastGeneric()
+                                    {
+                                        if let Ok(binding) = visual.GetBinding(&binding_name) {
+                                            if let Ok(elems) = binding.GetTextElements() {
+                                                let el_count = elems.Size().unwrap_or(0);
+                                                for j in 0..el_count {
+                                                    if let Ok(el) = elems.GetAt(j) {
+                                                        if let Ok(t) = el.Text() {
+                                                            let s = t
+                                                                .to_string_lossy()
+                                                                .trim()
+                                                                .to_string();
+                                                            if !s.is_empty() {
+                                                                texts.push(s);
                                                             }
                                                         }
                                                     }
@@ -531,90 +576,36 @@ fn run_windows_notification_fetcher() {
                                         }
                                     }
                                 }
+                            }
 
-                                let (summary, body) = if texts.len() >= 2 {
-                                    (texts[0].clone(), texts[1..].join("\n"))
-                                } else if texts.len() == 1 {
-                                    let sum = if !app_name.trim().is_empty() {
-                                        app_name.trim().to_string()
-                                    } else {
-                                        "System Notification".to_string()
-                                    };
-                                    (sum, texts[0].clone())
+                            let (summary, body) = if texts.len() >= 2 {
+                                (texts[0].clone(), texts[1..].join("\n"))
+                            } else if texts.len() == 1 {
+                                let sum = if !app_name.trim().is_empty() {
+                                    app_name.trim().to_string()
                                 } else {
-                                    continue;
+                                    "System Notification".to_string()
                                 };
+                                (sum, texts[0].clone())
+                            } else {
+                                continue;
+                            };
 
-                                enqueue_toast_ex(
-                                    summary,
-                                    body,
-                                    app_name,
-                                    1,
-                                    5500,
-                                    false,
-                                    1.5,
-                                );
-                            }
+                            enqueue_toast_ex(
+                                summary,
+                                body,
+                                app_name,
+                                1,
+                                5500,
+                                false,
+                                45.0,
+                            );
+                        }
+
+                        if state_dirty {
+                            save_persisted_seen_ids(max_seen_id, &seen_ids);
                         }
                     }
-                }
-            }
-        }
-
-        // 2. Also tail `%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db-wal`
-        // to capture any unpackaged/transient Windows toast notifications immediately
-        if let Some(ref path) = wal_path {
-            if let Ok(meta) = std::fs::metadata(path) {
-                let cur_len = meta.len();
-                if cur_len < last_wal_len {
-                    last_wal_len = cur_len;
-                } else if cur_len > last_wal_len {
-                    let read_from = last_wal_len.saturating_sub(2048);
-                    let to_read = (cur_len - read_from).min(65536) as usize;
-                    if let Ok(mut file) = std::fs::OpenOptions::new()
-                        .read(true)
-                        .share_mode(7) // FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
-                        .open(path)
-                    {
-                        if file.seek(SeekFrom::Start(read_from)).is_ok() {
-                            let mut buf = vec![0u8; to_read];
-                            if let Ok(n) = file.read(&mut buf) {
-                                let text_chunk = String::from_utf8_lossy(&buf[..n]);
-                                let mut search_slice: &str = &text_chunk;
-                                while let Some(t_start) = search_slice.find("<toast") {
-                                    let after_t = &search_slice[t_start..];
-                                    let Some(t_end) = after_t.find("</toast>") else {
-                                        break;
-                                    };
-                                    let toast_xml = &after_t[..t_end + 8];
-                                    let texts = extract_toast_texts_from_xml(toast_xml);
-                                    if texts.len() >= 2 {
-                                        enqueue_toast_ex(
-                                            texts[0].clone(),
-                                            texts[1..].join("\n"),
-                                            String::new(),
-                                            1,
-                                            5500,
-                                            false,
-                                            1.5,
-                                        );
-                                    } else if texts.len() == 1 {
-                                        enqueue_toast_ex(
-                                            "Windows Notification".to_string(),
-                                            texts[0].clone(),
-                                            String::new(),
-                                            1,
-                                            5500,
-                                            false,
-                                            1.5,
-                                        );
-                                    }
-                                    search_slice = &after_t[t_end + 8..];
-                                }
-                            }
-                        }
-                    }
-                    last_wal_len = cur_len;
                 }
             }
         }
